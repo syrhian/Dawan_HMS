@@ -35,12 +35,11 @@ source "qemu" "arch" {
 
   http_directory = "./setup"
 
-  boot_wait    = "140s"
+  boot_wait    = "180s"
   boot_command = [
     "<enter><wait20>",
-    "curl -fsSL http://{{ .HTTPIP }}:{{ .HTTPPort }}/user_configuration.json -o /tmp/user_configuration.json || curl -v http://{{ .HTTPIP }}:{{ .HTTPPort }}/user_configuration.json -o /tmp/user_configuration.json<enter>",
     "curl -fsSL http://{{ .HTTPIP }}:{{ .HTTPPort }}/user_credentials.json -o /tmp/user_credentials.json || curl -v http://{{ .HTTPIP }}:{{ .HTTPPort }}/user_credentials.json -o /tmp/user_credentials.json<enter>",
-    "archinstall --config /tmp/user_configuration.json --creds /tmp/user_credentials.json --silent<enter>"
+    "archinstall --config-url https://raw.githubusercontent.com/syrhian/Dawan_HMS/refs/heads/master/setup/user_configuration.json --creds /tmp/user_credentials.json --silent<enter>"
   ]
 }
 
