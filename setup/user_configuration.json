@@ -15,7 +15,7 @@
         "config_type": "default_layout",
         "device_modifications": [
             {
-                "device": "/dev/vda",
+                "device": "/dev/sda",
                 "partitions": [
                     {
                         "btrfs": [],
@@ -26,7 +26,7 @@
                         "fs_type": "fat32",
                         "mount_options": [],
                         "mountpoint": "/boot",
-                        "obj_id": "0654fd84-ceff-40e3-8039-b202bae24584",
+                        "obj_id": "",
                         "size": {
                             "sector_size": {
                                 "unit": "B",
@@ -53,7 +53,7 @@
                         "fs_type": "ext4",
                         "mount_options": [],
                         "mountpoint": "/",
-                        "obj_id": "57307ede-4a59-49d1-aa11-7753df75c896",
+                        "obj_id": "",
                         "size": {
                             "sector_size": {
                                 "unit": "B",
@@ -144,7 +144,8 @@
     },
     "ntp": true,
     "packages": [
-        "openssh"
+        "openssh",
+        "linux-firmware"
     ],
     "parallel_downloads": 0,
     "profile_config": {

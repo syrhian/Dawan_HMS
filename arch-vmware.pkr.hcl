@@ -32,18 +32,19 @@ source "vmware-iso" "arch" {
   cpus             = 4
   headless         = false
 
-  communicator = "ssh"
-  ssh_username = "dawan"
-  ssh_password = "Passw0rd"
-  ssh_timeout  = "30m"
+#  communicator = "ssh"
+#  ssh_username = "dawan"
+#  ssh_password = "Passw0rd"
+#  ssh_timeout  = "30m"
+
 
   http_directory = "./setup"
 
-  boot_wait    = "60s"
+  boot_wait    = "40s"
   boot_command = [
     "<enter><wait20>",
     "curl -fsSL http://{{ .HTTPIP }}:{{ .HTTPPort }}/user_credentials.json -o /tmp/user_credentials.json || curl -v http://{{ .HTTPIP }}:{{ .HTTPPort }}/user_credentials.json -o /tmp/user_credentials.json<enter>",
-    "archinstall --config-url https://raw.githubusercontent.com/syrhian/Dawan_HMS/refs/heads/master/setup/user_configuration.json --creds /tmp/user_credentials.json --silent<enter>"
+    "archinstall --config-url https://raw.githubusercontent.com/syrhian/Dawan_HMS/refs/heads/packer/setup/user_configuration.json --creds /tmp/user_credentials.json --silent<enter>"
   ]
 
   // Facultatif: arrêt propre quand Packer termine
