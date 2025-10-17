@@ -46,9 +46,6 @@ source "vmware-iso" "arch" {
     "curl -fsSL http://{{ .HTTPIP }}:{{ .HTTPPort }}/user_credentials.json -o /tmp/user_credentials.json || curl -v http://{{ .HTTPIP }}:{{ .HTTPPort }}/user_credentials.json -o /tmp/user_credentials.json<enter>",
     "archinstall --config-url https://raw.githubusercontent.com/syrhian/Dawan_HMS/refs/heads/packer/setup/user_configuration.json --creds /tmp/user_credentials.json --silent<enter>"
   ]
-
-  // Facultatif: arrêt propre quand Packer termine
-  shutdown_command = "echo 'Passw0rd' | sudo -S poweroff"
 }
 
 build {
