@@ -32,7 +32,7 @@ source "vmware-iso" "arch" {
   cpus             = 4
   headless         = false
 
-#  communicator = "ssh"
+  communicator = "none"
 #  ssh_username = "dawan"
 #  ssh_password = "Passw0rd"
 #  ssh_timeout  = "30m"
