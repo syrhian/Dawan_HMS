@@ -82,6 +82,49 @@ echo -e " * Génération du fstab [\e[32m✔ \e[0m]"
 echo "root UUID=$(blkid -s UUID -o value /dev/sda2) none luks" > /mnt/etc/crypttab
 echo -e " * Création du crypttab [\e[32m✔ \e[0m]"
 
-gum spin --title "fermeture de luks" -- bash -c "cryptsetup close root" > /dev/null
-echo -e " * fermeture de luks [\e[32m✔ \e[0m]"
+#gum spin --title "fermeture de luks" -- bash -c "cryptsetup close root" > /dev/null
+#echo -e " * fermeture de luks [\e[32m✔ \e[0m]"
+
+arch-chroot /mnt bash -c "
+
+ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
+hwclock --systohc
+
+sed -i 's/^#\(fr_FR.UTF-8 UTF-8\)/\1/' /etc/locale.gen
+locale-gen
+echo 'LANG=fr_FR.UTF-8' > /etc/locale.conf
+echo 'KEYMAP=fr' > /etc/vconsole.conf
+
+echo 'archlinux' > /etc/hostname
+
+pacman -S --noconfirm linux linux-headers linux-firmware btrfs-progs grub efibootmgr sudo networkmanager neovim
+
+echo 'HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block encrypt filesystems btrfs fsck)' > /etc/mkinitcpio.conf
+mkinitcpio -P
+
+UUID_LUKS=$(blkid -s UUID -o value /dev/sda2)
+sed -i 's|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"cryptdevice=UUID='$UUID_LUKS':root root=/dev/mapper/root\"|' /etc/default/grub
+
+sed -i 's|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|' /etc/default/grub
+
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
+
+passwd
+useradd -m -G wheel dawan
+passwd dawan
+
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+systemctl enable NetworkManager
+systemctl enable systemd-timesyncd
+
+exit
+"
+#umount -R /mnt
+#swapoff -a
+#cryptsetup close root
+
+
+
 
