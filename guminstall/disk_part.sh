@@ -61,8 +61,8 @@ umount /mnt
 " > /dev/null
 echo -e " * Création des sous-volumes Btrfs [\e[32m✔ \e[0m]"
 
-# Montage des systèmes de fichiers
-echo -e " * + Montage des systèmes de fichiers "
+# Montage des partitions
+echo -e " * + Montage des partitions "
 mount -o subvol=@ /dev/mapper/root /mnt > /dev/null
 echo -e "   ├── /dev/mapper/root /mnt"
 mkdir -p /mnt/{boot,home,snapshots} > /dev/null
@@ -77,15 +77,9 @@ gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /m
 echo -e " * installation des bases du système [\e[32m✔ \e[0m]"
 
 genfstab -U /mnt >> /mnt/etc/fstab
-echo -e " * Génération du fstab [\e[32m✔ \e[0m]"
-
-echo "root UUID=$(blkid -s UUID -o value /dev/sda2) none luks" > /mnt/etc/crypttab
-echo -e " * Création du crypttab [\e[32m✔ \e[0m]"
-
-#gum spin --title "fermeture de luks" -- bash -c "cryptsetup close root" > /dev/null
-#echo -e " * fermeture de luks [\e[32m✔ \e[0m]"
 
 arch-chroot /mnt bash -c "
+set -e
 
 ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
 hwclock --systohc
@@ -95,15 +89,27 @@ locale-gen
 echo 'LANG=fr_FR.UTF-8' > /etc/locale.conf
 echo 'KEYMAP=fr' > /etc/vconsole.conf
 
+UUID_LUKS=\$(blkid -s UUID -o value /dev/sda2)
+UUID_GRUB=\$(blkid -s PARTUUID -o value /dev/sda2)
+
+echo \"root \$UUID_LUKS none luks\" > /etc/crypttab
+
 echo 'archlinux' > /etc/hostname
 
 pacman -S --noconfirm linux linux-headers linux-firmware btrfs-progs grub efibootmgr sudo networkmanager neovim
 
-echo 'HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block encrypt filesystems btrfs fsck)' > /etc/mkinitcpio.conf
+#dd bs=512 count=4 if=/dev/urandom of=/crypto_keyfile.bin
+#cryptsetup luksAddKey /dev/sda2 /crypto_keyfile.bin
+#chmod 000 /crypto_keyfile.bin
+
+cat << 'EOF' > /etc/mkinitcpio.conf
+#FILES=\"/crypto_keyfile.bin\"
+HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block encrypt btrfs fsck filesystems shutdown)
+EOF
+
 mkinitcpio -P
 
-UUID_LUKS=$(blkid -s UUID -o value /dev/sda2)
-sed -i 's|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"cryptdevice=UUID='$UUID_LUKS':root root=/dev/mapper/root\"|' /etc/default/grub
+sed -i \"s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\\\"cryptdevice=UUID=\$UUID_GRUB:root root=/dev/mapper/root\\\"|\" /etc/default/grub
 
 sed -i 's|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|' /etc/default/grub
 
@@ -121,10 +127,8 @@ systemctl enable systemd-timesyncd
 
 exit
 "
+
 #umount -R /mnt
 #swapoff -a
 #cryptsetup close root
-
-
-
 
