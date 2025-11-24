@@ -47,7 +47,7 @@ echo -e " * formatage du boot [\e[32m✔ \e[0m]"
 #root
 disk_encrypt
 gum spin --title "formatage du root" -- bash -c "
-mkfs.btrfs /dev/mapper/root
+mkfs.btrfs -f -L root /dev/mapper/root
 " > /dev/null
 echo -e " * formatage du root [\e[32m✔ \e[0m]"
 
@@ -57,7 +57,6 @@ mount /dev/mapper/root /mnt
 btrfs subvolume create /mnt/@
 btrfs subvolume create /mnt/@home
 btrfs subvolume create /mnt/@snapshots
-umount /mnt 
 " > /dev/null
 echo -e " * Création des sous-volumes Btrfs [\e[32m✔ \e[0m]"
 
@@ -65,18 +64,34 @@ echo -e " * Création des sous-volumes Btrfs [\e[32m✔ \e[0m]"
 echo -e " * + Montage des partitions "
 mount -o subvol=@ /dev/mapper/root /mnt > /dev/null
 echo -e "   ├── /dev/mapper/root /mnt"
-mkdir -p /mnt/{boot,home,snapshots} > /dev/null
+mkdir -p /mnt/{efi,home,snapshots} > /dev/null
 mount -o subvol=@home /dev/mapper/root /mnt/home > /dev/null
 echo -e "   ├── /dev/mapper/root /mnt/home"
 mount -o subvol=@snapshots /dev/mapper/root /mnt/snapshots > /dev/null
 echo -e "   ├── /dev/mapper/root /mnt/snapshots"
-mount /dev/${disk}1 /mnt/boot > /dev/null
-echo -e "   └── /dev/${disk}1 /mnt/boot"
+mount /dev/${disk}1 /mnt/efi > /dev/null
+echo -e "   └── /dev/${disk}1 /mnt/efi"
 
-gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /mnt base linux linux-firmware"
+gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /mnt base base-devel linux linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo"
 echo -e " * installation des bases du système [\e[32m✔ \e[0m]"
 
 genfstab -U /mnt >> /mnt/etc/fstab
+
+mkdir -p /mnt/efi/EFI/Linux
+
+cat << 'EOF' > /mnt/etc/mkinitcpio.d/linux.preset
+ALL_config="/etc/mkinitcpio.conf"
+ALL_kver="/boot/vmlinuz-linux"
+ALL_microcode=(/boot/*-ucode.img)
+
+PRESETS=('default' 'fallback')
+
+default_uki="/efi/EFI/Linux/arch-linux.efi"
+default_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"
+
+fallback_uki="/efi/EFI/Linux/arch-linux-fallback.efi"
+fallback_options="-S autodetect"
+EOF
 
 arch-chroot /mnt bash -c "
 set -e
@@ -89,32 +104,15 @@ locale-gen
 echo 'LANG=fr_FR.UTF-8' > /etc/locale.conf
 echo 'KEYMAP=fr' > /etc/vconsole.conf
 
-UUID_LUKS=\$(blkid -s UUID -o value /dev/sda2)
-UUID_GRUB=\$(blkid -s PARTUUID -o value /dev/sda2)
-
-echo \"root \$UUID_LUKS none luks\" > /etc/crypttab
+UUID_GRUB=\$(blkid -s UUID -o value /dev/sda2)
 
 echo 'archlinux' > /etc/hostname
 
-pacman -S --noconfirm linux linux-headers linux-firmware btrfs-progs grub efibootmgr sudo networkmanager neovim
+pacman -S --noconfirm linux-headers btrfs-progs grub efibootmgr 
 
 #dd bs=512 count=4 if=/dev/urandom of=/crypto_keyfile.bin
 #cryptsetup luksAddKey /dev/sda2 /crypto_keyfile.bin
 #chmod 000 /crypto_keyfile.bin
-
-cat << 'EOF' > /etc/mkinitcpio.conf
-#FILES=\"/crypto_keyfile.bin\"
-HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block encrypt btrfs fsck filesystems shutdown)
-EOF
-
-mkinitcpio -P
-
-sed -i \"s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\\\"cryptdevice=UUID=\$UUID_GRUB:root root=/dev/mapper/root\\\"|\" /etc/default/grub
-
-sed -i 's|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|' /etc/default/grub
-
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
-grub-mkconfig -o /boot/grub/grub.cfg
 
 passwd
 useradd -m -G wheel dawan
@@ -122,11 +120,25 @@ passwd dawan
 
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-systemctl enable NetworkManager
-systemctl enable systemd-timesyncd
+cat << 'EOF' > /etc/mkinitcpio.conf
+#FILES=\"/crypto_keyfile.bin\"
+HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block cd-encrypt btrfs fsck filesystems shutdown)
+EOF
+
+mkinitcpio -P
+
+sed -i \"s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\\\"cryptdevice=UUID=\$UUID_GRUB:root root=/dev/mapper/root rootflags=subvol=@\\\"|\" /etc/default/grub
+
+sed -i 's|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|' /etc/default/grub
+
+grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB --recheck
+grub-mkconfig -o /boot/grub/grub.cfg
 
 exit
 "
+
+systemctl --root /mnt enable systemd-resolved systemd-timesyncd NetworkManager
+systemctl --root /mnt mask systemd-networkd
 
 #umount -R /mnt
 #swapoff -a
