@@ -25,8 +25,11 @@ disk_encrypt() {
 }
 
 # netoyage de la partition sélectioné
-gum spin --title "Nettoyage des partitions" -- bash -c "wipefs -a /dev/$disk
-sgdisk --zap-all /dev/$disk" > /dev/null
+gum spin --title "Nettoyage des partitions" -- bash -c "
+umount -R /mnt
+wipefs -a /dev/$disk
+sgdisk --zap-all /dev/$disk
+" > /dev/null
 echo -e " * Nettoyage des partitions [\e[32m✔ \e[0m]"
 
 # création de partitions gpt et efi
@@ -57,6 +60,7 @@ mount /dev/mapper/root /mnt
 btrfs subvolume create /mnt/@
 btrfs subvolume create /mnt/@home
 btrfs subvolume create /mnt/@snapshots
+umount /mnt
 " > /dev/null
 echo -e " * Création des sous-volumes Btrfs [\e[32m✔ \e[0m]"
 
@@ -72,7 +76,7 @@ echo -e "   ├── /dev/mapper/root /mnt/snapshots"
 mount /dev/${disk}1 /mnt/efi > /dev/null
 echo -e "   └── /dev/${disk}1 /mnt/efi"
 
-gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /mnt base base-devel linux linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo"
+gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /mnt base base-devel linux linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo grub efibootmgr"
 echo -e " * installation des bases du système [\e[32m✔ \e[0m]"
 
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -122,10 +126,8 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 cat << 'EOF' > /etc/mkinitcpio.conf
 #FILES=\"/crypto_keyfile.bin\"
-HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block cd-encrypt btrfs fsck filesystems shutdown)
+HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block sd-encrypt btrfs fsck filesystems shutdown)
 EOF
-
-mkinitcpio -P
 
 sed -i \"s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\\\"cryptdevice=UUID=\$UUID_GRUB:root root=/dev/mapper/root rootflags=subvol=@\\\"|\" /etc/default/grub
 
@@ -133,6 +135,8 @@ sed -i 's|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|' /etc/default/gr
 
 grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB --recheck
 grub-mkconfig -o /boot/grub/grub.cfg
+
+mkinitcpio -P
 
 exit
 "
