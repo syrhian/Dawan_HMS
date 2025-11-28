@@ -20,8 +20,7 @@ disk_encrypt() {
   # Lancement du chiffrement
   gum spin --title "Chiffrement avec LUKS ..." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup luksFormat /dev/${disk}2 --batch-mode --key-file=-" > /dev/null
   echo -e " * Chiffrement avec LUKS [\e[32m✔ \e[0m]"
-  gum spin --title "Accès a la partition." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup open /dev/${disk}2 root --key-file=-" > /dev/nullp
-  
+  gum spin --title "Accès a la partition." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup open /dev/${disk}2 root --key-file=-" > /dev/null
   echo -e " * Accès a la partition [\e[32m✔ \e[0m]"
 }
 
