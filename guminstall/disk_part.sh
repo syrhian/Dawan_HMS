@@ -18,9 +18,10 @@ disk_encrypt() {
   done
 
   # Lancement du chiffrement
-  gum spin --title "Encryptage avec LUKS ..." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup luksFormat /dev/${disk}2 --batch-mode --key-file=-" > /dev/null
-  echo -e " * Encryptage avec LUKS [\e[32m✔ \e[0m]"
-  gum spin --title "Accès a la partition." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup open /dev/${disk}2 root --key-file=-" > /dev/null
+  gum spin --title "Chiffrement avec LUKS ..." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup luksFormat /dev/${disk}2 --batch-mode --key-file=-" > /dev/null
+  echo -e " * Chiffrement avec LUKS [\e[32m✔ \e[0m]"
+  gum spin --title "Accès a la partition." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup open /dev/${disk}2 root --key-file=-" > /dev/nullp
+  
   echo -e " * Accès a la partition [\e[32m✔ \e[0m]"
 }
 
@@ -68,13 +69,13 @@ echo -e " * Création des sous-volumes Btrfs [\e[32m✔ \e[0m]"
 echo -e " * + Montage des partitions "
 mount -o subvol=@ /dev/mapper/root /mnt > /dev/null
 echo -e "   ├── /dev/mapper/root /mnt"
-mkdir -p /mnt/{efi,home,snapshots} > /dev/null
+mkdir -p /mnt/{boot,home,snapshots} > /dev/null
 mount -o subvol=@home /dev/mapper/root /mnt/home > /dev/null
 echo -e "   ├── /dev/mapper/root /mnt/home"
 mount -o subvol=@snapshots /dev/mapper/root /mnt/snapshots > /dev/null
 echo -e "   ├── /dev/mapper/root /mnt/snapshots"
-mount /dev/${disk}1 /mnt/efi > /dev/null
-echo -e "   └── /dev/${disk}1 /mnt/efi"
+mount /dev/${disk}1 /mnt/boot > /dev/null
+echo -e "   └── /dev/${disk}1 /mnt/boot"
 
 gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /mnt base base-devel linux linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo grub efibootmgr"
 echo -e " * installation des bases du système [\e[32m✔ \e[0m]"
@@ -90,10 +91,10 @@ ALL_microcode=(/boot/*-ucode.img)
 
 PRESETS=('default' 'fallback')
 
-default_uki="/efi/EFI/Linux/arch-linux.efi"
-default_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"
+default_image="/boot/initramfs-linux.img"
+default_options=""
 
-fallback_uki="/efi/EFI/Linux/arch-linux-fallback.efi"
+fallback_image="/boot/initramfs-linux-fallback.img"
 fallback_options="-S autodetect"
 EOF
 
@@ -114,9 +115,12 @@ echo 'archlinux' > /etc/hostname
 
 pacman -S --noconfirm linux-headers btrfs-progs grub efibootmgr 
 
-#dd bs=512 count=4 if=/dev/urandom of=/crypto_keyfile.bin
-#cryptsetup luksAddKey /dev/sda2 /crypto_keyfile.bin
-#chmod 000 /crypto_keyfile.bin
+#mkdir /secure
+
+#dd if=/dev/urandom of=/secure/crypto_keyfile.bin bs=512 count=8
+#chmod 000 /secure/*
+#chmod 600 /boot/initramfs-linux*
+#cryptsetup luksAddKey /dev/sda2 /secure/crypto_keyfile.bin
 
 passwd
 useradd -m -G wheel dawan
@@ -125,18 +129,22 @@ passwd dawan
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 cat << 'EOF' > /etc/mkinitcpio.conf
-#FILES=\"/crypto_keyfile.bin\"
-HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block sd-encrypt btrfs fsck filesystems shutdown)
+#FILES="/secure/crypto_keyfile.bin"
+HOOKS=(base udev autodetect microcode modconf kms keyboard keymap block encrypt btrfs filesystems fsck)
 EOF
 
-sed -i \"s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\\\"cryptdevice=UUID=\$UUID_GRUB:root root=/dev/mapper/root rootflags=subvol=@\\\"|\" /etc/default/grub
+#cat << 'EOF' > /etc/crypttab
+#root UUID=\$UUID_GRUB /secure/crypto_keyfile.bin luks,discard
+#EOF
+
+sed -i \"s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\\\"loglevel=7 root=/dev/mapper/root cryptdevice=UUID=\$UUID_GRUB:root rootflags=subvol=@\\\"|\" /etc/default/grub
 
 sed -i 's|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|' /etc/default/grub
 
-grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB --recheck
-grub-mkconfig -o /boot/grub/grub.cfg
-
 mkinitcpio -P
+
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
 
 exit
 "
