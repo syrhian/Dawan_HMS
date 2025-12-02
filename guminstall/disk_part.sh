@@ -106,24 +106,23 @@ cr ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
 cr hwclock --systohc
 echo -e " * définition timezone et horloge système [\e[32m✔ \e[0m]"
 
-cr sed -i 's/^#\(fr_FR.UTF-8 UTF-8\)/\1/' /etc/locale.gen
+cr sed -i "s/^#\(fr_FR.UTF-8 UTF-8\)/\1/" /etc/locale.gen
 cr locale-gen
-cr echo 'LANG=fr_FR.UTF-8' > /etc/locale.conf
-cr echo 'KEYMAP=fr' > /etc/vconsole.conf
+cr echo "LANG=fr_FR.UTF-8" > /etc/locale.conf
+cr echo "KEYMAP=fr" > /etc/vconsole.conf
 echo -e " * configuration locales et clavier [\e[32m✔ \e[0m]"
 
-cr echo 'archlinux' > /etc/hostname
+cr echo "archlinux" > /etc/hostname
 echo -e " * configuration du hostname [\e[32m✔ \e[0m]"
 
 cr pacman -S --noconfirm linux-headers btrfs-progs grub efibootmgr
 echo -e " * installation des paquets grub efibootmgr linux-headers btrfs-progs [\e[32m✔ \e[0m]"
 
-#mkdir /mnt/boot/secure
-#dd if=/dev/urandom of=/mnt/boot/secure/crypto_keyfile.bin bs=512 count=8
-#chmod 000 /mnt/boot/secure/*
-#chmod 600 /mnt/boot/initramfs-linux*
-#cryptsetup luksAddKey /dev/sda2 /mnt/boot/secure/crypto_keyfile.bin
-#passwd
+mkdir /mnt/boot/secure
+dd if=/dev/urandom of=/mnt/boot/secure/crypto_keyfile.bin bs=512 count=8
+chmod 000 /mnt/boot/secure/*
+chmod 600 /mnt/boot/initramfs-linux*
+cryptsetup luksAddKey /dev/sda2 /mnt/boot/secure/crypto_keyfile.bin
 
 cr chpasswd <<<"root:$PASSWD"
 echo -e " * configuration du mot de passe root [\e[32m✔ \e[0m]"
@@ -141,13 +140,13 @@ echo -e " * configuration mkinitcpio.conf [\e[32m✔ \e[0m]"
 
 UUID_GRUB=$(blkid -s UUID -o value /dev/sda2)
 
-#cat << EOF > /mnt/etc/crypttab
-#root UUID=${UUID_GRUB} /boot/secure/crypto_keyfile.bin luks,discard
-#EOF
+cat << EOF > /mnt/etc/crypttab
+root UUID=${UUID_GRUB} /boot/secure/crypto_keyfile.bin luks,discard
+EOF
 
 
 sed -i \
-"s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=loglevel=7\ root=/dev/mapper/root\ cryptdevice=UUID=${UUID_GRUB}:root\ rootflags=subvol=@|" \
+"s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"loglevel=7\ root=/dev/mapper/root\ cryptdevice=UUID=${UUID_GRUB}:root\ rootflags=subvol=@\"|" \
 /mnt/etc/default/grub
 
 sed -i \
@@ -175,6 +174,6 @@ cat /mnt/etc/default/grub | grep GRUB_CMDLINE_LINUX_DEFAULT
 cat /mnt/etc/locale.gen | grep fr_FR.UTF-8
 cat /mnt/etc/mkinitcpio.conf
 cat /mnt/etc/fstab
-#cat /mnt/etc/crypttab
+cat /mnt/etc/crypttab
 cat /mnt/etc/mkinitcpio.d/linux.preset
 ls /mnt/boot
