@@ -3,6 +3,12 @@
 disk=$(lsblk -no NAME,TYPE,SIZE | awk '$2=="disk" {print $1, "(" $3 ")"}' | \
   gum choose --header "Sélectionner le disque à utiliser pour l'installation :" | awk '{print $1}')
 
+export PASSWD="p"
+
+cr() {
+    arch-chroot /mnt "$@"
+}
+
 disk_encrypt() {
   local cryptpass confirm
 
@@ -76,12 +82,11 @@ echo -e "   ├── /dev/mapper/root /mnt/snapshots"
 mount /dev/${disk}1 /mnt/boot > /dev/null
 echo -e "   └── /dev/${disk}1 /mnt/boot"
 
-gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /mnt base base-devel linux linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo grub efibootmgr"
+gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /mnt linux base base-devel linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo grub efibootmgr"
 echo -e " * installation des bases du système [\e[32m✔ \e[0m]"
 
-genfstab -U /mnt >> /mnt/etc/fstab
-
-mkdir -p /mnt/efi/EFI/Linux
+gum spin --title "installation des bases du système" -- bash -c "genfstab -U /mnt >> /mnt/etc/fstab"
+echo -e " * génération du fstab [\e[32m✔ \e[0m]"
 
 cat << 'EOF' > /mnt/etc/mkinitcpio.d/linux.preset
 ALL_config="/etc/mkinitcpio.conf"
@@ -97,61 +102,79 @@ fallback_image="/boot/initramfs-linux-fallback.img"
 fallback_options="-S autodetect"
 EOF
 
-arch-chroot /mnt bash -c "
-set -e
+cr ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
+cr hwclock --systohc
+echo -e " * définition timezone et horloge système [\e[32m✔ \e[0m]"
 
-ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
-hwclock --systohc
+cr sed -i 's/^#\(fr_FR.UTF-8 UTF-8\)/\1/' /etc/locale.gen
+cr locale-gen
+cr echo 'LANG=fr_FR.UTF-8' > /etc/locale.conf
+cr echo 'KEYMAP=fr' > /etc/vconsole.conf
+echo -e " * configuration locales et clavier [\e[32m✔ \e[0m]"
 
-sed -i 's/^#\(fr_FR.UTF-8 UTF-8\)/\1/' /etc/locale.gen
-locale-gen
-echo 'LANG=fr_FR.UTF-8' > /etc/locale.conf
-echo 'KEYMAP=fr' > /etc/vconsole.conf
+cr echo 'archlinux' > /etc/hostname
+echo -e " * configuration du hostname [\e[32m✔ \e[0m]"
 
-UUID_GRUB=\$(blkid -s UUID -o value /dev/sda2)
+cr pacman -S --noconfirm linux-headers btrfs-progs grub efibootmgr
+echo -e " * installation des paquets grub efibootmgr linux-headers btrfs-progs [\e[32m✔ \e[0m]"
 
-echo 'archlinux' > /etc/hostname
+#mkdir /mnt/boot/secure
+#dd if=/dev/urandom of=/mnt/boot/secure/crypto_keyfile.bin bs=512 count=8
+#chmod 000 /mnt/boot/secure/*
+#chmod 600 /mnt/boot/initramfs-linux*
+#cryptsetup luksAddKey /dev/sda2 /mnt/boot/secure/crypto_keyfile.bin
+#passwd
 
-pacman -S --noconfirm linux-headers btrfs-progs grub efibootmgr 
+cr chpasswd <<<"root:$PASSWD"
+echo -e " * configuration du mot de passe root [\e[32m✔ \e[0m]"
+cr useradd -m -G wheel dawan
+cr chpasswd <<<"dawan:$PASSWD"
+echo -e " * création de l'utilisateur dawan [\e[32m✔ \e[0m]"
 
-#mkdir /secure
+cr sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-#dd if=/dev/urandom of=/secure/crypto_keyfile.bin bs=512 count=8
-#chmod 000 /secure/*
-#chmod 600 /boot/initramfs-linux*
-#cryptsetup luksAddKey /dev/sda2 /secure/crypto_keyfile.bin
-
-passwd
-useradd -m -G wheel dawan
-passwd dawan
-
-sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
-
-cat << 'EOF' > /etc/mkinitcpio.conf
-#FILES="/secure/crypto_keyfile.bin"
+cat << EOF > /mnt/etc/mkinitcpio.conf
+#FILES="/boot/secure/crypto_keyfile.bin"
 HOOKS=(base udev autodetect microcode modconf kms keyboard keymap block encrypt btrfs filesystems fsck)
 EOF
+echo -e " * configuration mkinitcpio.conf [\e[32m✔ \e[0m]"
 
-#cat << 'EOF' > /etc/crypttab
-#root UUID=\$UUID_GRUB /secure/crypto_keyfile.bin luks,discard
+UUID_GRUB=$(blkid -s UUID -o value /dev/sda2)
+
+#cat << EOF > /mnt/etc/crypttab
+#root UUID=${UUID_GRUB} /boot/secure/crypto_keyfile.bin luks,discard
 #EOF
 
-sed -i \"s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\\\"loglevel=7 root=/dev/mapper/root cryptdevice=UUID=\$UUID_GRUB:root rootflags=subvol=@\\\"|\" /etc/default/grub
 
-sed -i 's|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|' /etc/default/grub
+sed -i \
+"s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=loglevel=7\ root=/dev/mapper/root\ cryptdevice=UUID=${UUID_GRUB}:root\ rootflags=subvol=@|" \
+/mnt/etc/default/grub
 
-mkinitcpio -P
+sed -i \
+"s|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|" \
+/mnt/etc/default/grub
+echo -e " * configuration grub [\e[32m✔ \e[0m]"
 
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
-grub-mkconfig -o /boot/grub/grub.cfg
+cr mkinitcpio -P
+echo -e " * génération des images initramfs [\e[32m✔ \e[0m]"
 
-exit
-"
+cr grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+cr grub-mkconfig -o /boot/grub/grub.cfg
+echo -e " * installation de grub [\e[32m✔ \e[0m]"
+
 
 systemctl --root /mnt enable systemd-resolved systemd-timesyncd NetworkManager
 systemctl --root /mnt mask systemd-networkd
+echo -e " * Activation des services [\e[32m✔ \e[0m]"
 
 #umount -R /mnt
 #swapoff -a
 #cryptsetup close root
 
+cat /mnt/etc/default/grub | grep GRUB_CMDLINE_LINUX_DEFAULT
+cat /mnt/etc/locale.gen | grep fr_FR.UTF-8
+cat /mnt/etc/mkinitcpio.conf
+cat /mnt/etc/fstab
+#cat /mnt/etc/crypttab
+cat /mnt/etc/mkinitcpio.d/linux.preset
+ls /mnt/boot
