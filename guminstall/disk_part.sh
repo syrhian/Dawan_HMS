@@ -7,11 +7,12 @@ export USER="dawan"
 export PASSWD="p"
 
 export PACKAGES="linux-headers btrfs-progs grub efibootmgr"
-export PACSTRAP="linux base base-devel linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo grub efibootmgr"
+#export PACSTRAP="linux base base-devel linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo grub efibootmgr"
 
 cr() {
     arch-chroot /mnt "$@"
 }
+export -f cr
 
 disk_encrypt() {
   local cryptpass confirm
@@ -28,17 +29,17 @@ disk_encrypt() {
   done
 
   # Lancement du chiffrement
-  if gum spin --title "Chiffrement avec LUKS ..." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup luksFormat /dev/${disk}2 --batch-mode --key-file=-" > /dev/null; then
-      echo -e " * Chiffrement avec LUKS [\e[32m✔ \e[0m]"
+  if gum spin --title " * + Chiffrement avec LUKS ..." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup luksFormat /dev/${disk}2 --batch-mode --key-file=-" > /dev/null; then
+      echo -e " * + Chiffrement avec LUKS [\e[32m✔ \e[0m]"
   else
-      echo -e " * Chiffrement avec LUKS [\e[31m✖ \e[0m]"   
+      echo -e " * + Chiffrement avec LUKS [\e[31m✖ \e[0m]"
   fi
 
   # Ouverture de la partition chiffrée
-  if gum spin --title "Accès a la partition." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup open /dev/${disk}2 root --key-file=-" > /dev/null; then
-      echo -e " * Accès a la partition [\e[32m✔ \e[0m]"
+  if gum spin --title "   └── Accès a la partition." -- bash -c "echo -e -n '$cryptpass' | sudo cryptsetup open /dev/${disk}2 root --key-file=-" > /dev/null; then
+      echo -e "   └── Accès a la partition [\e[32m✔ \e[0m]"
   else
-      echo -e " * Accès a la partition [\e[31m✖ \e[0m]"
+      echo -e "   └── Accès a la partition [\e[31m✖ \e[0m]"
   fi
 }
 
@@ -109,13 +110,17 @@ echo -e "   ├── /dev/mapper/root /mnt/snapshots"
 mount /dev/${disk}1 /mnt/boot > /dev/null
 echo -e "   └── /dev/${disk}1 /mnt/boot"
 
-if gum spin --title "installation des bases du système" -- bash -c "pacstrap -K /mnt $PACSTRAP" > /dev/null; then
+if gum spin --title "installation des bases du système" -- bash -c "
+pacstrap -K /mnt linux base base-devel linux-firmware neovim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl networkmanager sudo grub efibootmgr
+"; then
     echo -e " * installation des bases du système [\e[32m✔ \e[0m]"
 else
     echo -e " * installation des bases du système [\e[31m✖ \e[0m]"
 fi
 
-if gum spin --title "installation des bases du système" -- bash -c "genfstab -U /mnt >> /mnt/etc/fstab"; then
+if gum spin --title "génération du fstab" -- bash -c "
+genfstab -U /mnt >> /mnt/etc/fstab
+" > /dev/null; then
     echo -e " * génération du fstab [\e[32m✔ \e[0m]"
 else
     echo -e " * génération du fstab [\e[31m✖ \e[0m]"
@@ -135,20 +140,50 @@ fallback_image="/boot/initramfs-linux-fallback.img"
 fallback_options="-S autodetect"
 EOF
 
-cr ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
-cr hwclock --systohc
-echo -e " * définition timezone et horloge système [\e[32m✔ \e[0m]"
+tzn() {
+    cr ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
+    cr hwclock --systohc
+}
+export -f tzn
 
-cr sed -i "s/^#\(fr_FR.UTF-8 UTF-8\)/\1/" /etc/locale.gen
-cr locale-gen
-cr echo "LANG=fr_FR.UTF-8" > /etc/locale.conf
-cr echo "KEYMAP=fr" > /etc/vconsole.conf
-echo -e " * configuration locales et clavier [\e[32m✔ \e[0m]"
+if gum spin --title "configuration timezone et horloge système" -- bash -c "
+tzn
+" > /dev/null; then
+    echo -e " * configuration timezone et horloge système [\e[32m✔ \e[0m]"
+else
+    echo -e " * configuration timezone et horloge système [\e[31m✖ \e[0m]"
+    exit 1
+fi
 
+lcls() {
+    cr sed -i "s/^#\(fr_FR.UTF-8 UTF-8\)/\1/" /etc/locale.gen
+    cr locale-gen
+    cr echo "LANG=fr_FR.UTF-8" > /etc/locale.conf
+    cr echo "KEYMAP=fr" > /etc/vconsole.conf
+}
+export -f lcls
+
+if gum spin --title "configuration locale et clavier" -- bash -c "
+lcls
+" > /dev/null; then
+    echo -e " * configuration locale et clavier [\e[32m✔ \e[0m]"
+else
+    echo -e " * configuration locale et clavier [\e[31m✖ \e[0m]"
+    exit 1
+fi
+
+if gum spin --title "configuration du hostname" -- bash -c "
 cr echo "archlinux" > /etc/hostname
-echo -e " * configuration du hostname [\e[32m✔ \e[0m]"
+" > /dev/null; then
+    echo -e " * configuration du hostname [\e[32m✔ \e[0m]"
+else
+    echo -e " * configuration du hostname [\e[31m✖ \e[0m]"
+    exit 1
+fi
 
-if cr pacman -S --noconfirm $PACKAGES; then
+if gum spin --title "installation des paquets" -- bash -c '
+cr pacman -S --noconfirm '"$PACKAGES"'
+' > /dev/null; then
     echo -e " * installation des paquets $PACKAGES [\e[32m✔ \e[0m]"
 else
     echo -e " * installation des paquets $PACKAGES [\e[31m✖ \e[0m]"
@@ -160,24 +195,29 @@ fi
 #chmod 600 /mnt/boot/initramfs-linux*
 #cryptsetup luksAddKey /dev/${disk}2 /mnt/boot/secure/crypto_keyfile.bin
 
-if cr chpasswd <<<"root:$PASSWD" > /dev/null; then
+if gum spin --title "configuration du mot de passe root" -- bash -c "
+cr chpasswd <<<\"root:\"$PASSWD\"\"
+" > /dev/null; then
     echo -e " * configuration du mot de passe root [\e[32m✔ \e[0m]"
 else
     echo -e " * configuration du mot de passe root [\e[31m✖ \e[0m]"
 fi
 
-if cr useradd -m -G wheel "$USER" > /dev/null; then
+if gum spin --title "création de l'utilisateur" -- bash -c "
+cr useradd -m -G wheel \"$USER\"
+" > /dev/null; then
     echo -e " * création de l'utilisateur $USER [\e[32m✔ \e[0m]"
 else
     echo -e " * création de l'utilisateur $USER [\e[31m✖ \e[0m]"
 fi
 
-if cr chpasswd <<<"$USER:$PASSWD" > /dev/null; then
+if gum spin --title "configuration sudoers" -- bash -c "
+cr chpasswd <<<\"\"$USER\":\"$PASSWD\"\"
+" > /dev/null; then
     echo -e " * configuration du mot de passe de l'utilisateur $USER [\e[32m✔ \e[0m]"
 else
     echo -e " * configuration du mot de passe de l'utilisateur $USER [\e[31m✖ \e[0m]"  
 fi
-
 
 cr sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
@@ -185,7 +225,6 @@ cat << EOF > /mnt/etc/mkinitcpio.conf
 #FILES="/boot/secure/crypto_keyfile.bin"
 HOOKS=(base udev autodetect microcode modconf kms keyboard keymap block encrypt btrfs filesystems fsck)
 EOF
-echo -e " * configuration mkinitcpio.conf [\e[32m✔ \e[0m]"
 
 UUID_GRUB=$(blkid -s UUID -o value /dev/${disk}2)
 
@@ -200,36 +239,41 @@ sed -i \
 sed -i \
 "s|^#GRUB_ENABLE_CRYPTODISK=.*|GRUB_ENABLE_CRYPTODISK=y|" \
 /mnt/etc/default/grub
-echo -e " * configuration grub [\e[32m✔ \e[0m]"
 
-if cr mkinitcpio -P > /dev/null; then
+if gum spin --title "génération des images initramfs" -- bash -c "
+cr mkinitcpio -P
+" > /dev/null; then
     echo -e " * génération des images initramfs [\e[32m✔ \e[0m]"
 else
     echo -e " * génération des images initramfs [\e[31m✖ \e[0m]"
 fi
 
-if cr grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB > /dev/null; then
+if gum spin --title "installation de grub" -- bash -c "
+cr grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+" > /dev/null; then
     echo -e " * installation de grub [\e[32m✔ \e[0m]"
 else
     echo -e " * installation de grub [\e[31m✖ \e[0m]"
 fi
 
-if cr grub-mkconfig -o /boot/grub/grub.cfg > /dev/null; then
+if gum spin --title "génération de la configuration de grub" -- bash -c "
+cr grub-mkconfig -o /boot/grub/grub.cfg
+" > /dev/null; then
     echo -e " * génération de la configuration de grub [\e[32m✔ \e[0m]"
 else
     echo -e " * génération de la configuration de grub [\e[31m✖ \e[0m]"
 fi
 
-if systemctl --root /mnt enable systemd-resolved systemd-timesyncd NetworkManager && \
-   systemctl --root /mnt mask systemd-networkd > /dev/null; then
+if gum spin --title "activation des services" -- bash -c "
+systemctl --root /mnt enable systemd-resolved systemd-timesyncd NetworkManager && \
+systemctl --root /mnt mask systemd-networkd
+" > /dev/null; then
     echo -e " * Activation des services [\e[32m✔ \e[0m]"
 else
     echo -e " * Activation des services [\e[31m✖ \e[0m]"
 fi
 
-#umount -R /mnt
-#swapoff -a
-#cryptsetup close root
+umount -R /mnt
 
 cat /mnt/etc/default/grub | grep GRUB_CMDLINE_LINUX_DEFAULT
 cat /mnt/etc/locale.gen | grep fr_FR.UTF-8
