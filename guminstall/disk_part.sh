@@ -213,11 +213,10 @@ else
     echo -e " * installation des paquets $PACKAGES [\e[31m✖ \e[0m]"
 fi
 
-#mkdir /mnt/boot/secure
-#dd if=/dev/urandom of=/mnt/boot/secure/crypto_keyfile.bin bs=512 count=8
-#chmod 000 /mnt/boot/secure/*
-#chmod 600 /mnt/boot/initramfs-linux*
-#cryptsetup luksAddKey /dev/${disk}2 /mnt/boot/secure/crypto_keyfile.bin
+dd if=/dev/urandom of=/mnt/crypto_keyfile.bin bs=512 count=8
+chmod 000 /mnt/crypto_keyfile.bin
+chown root:root /mnt/crypto_keyfile.bin
+cryptsetup luksAddKey /dev/${disk}2 /mnt/crypto_keyfile.bin
 
 if gum spin --title "configuration du mot de passe root" -- bash -c "
 {
@@ -250,7 +249,7 @@ fi
 cr sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 cat << EOF > /mnt/etc/mkinitcpio.conf
-#FILES="/boot/secure/crypto_keyfile.bin"
+FILES="/crypto_keyfile.bin"
 HOOKS=(base udev autodetect microcode modconf kms keyboard keymap block encrypt btrfs filesystems fsck)
 EOF
 
@@ -261,7 +260,7 @@ UUID_GRUB=$(blkid -s UUID -o value /dev/${disk}2)
 #EOF
 
 sed -i \
-"s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"loglevel=7\ root=/dev/mapper/root\ cryptdevice=UUID=${UUID_GRUB}:root\ rootflags=subvol=@\"|" \
+"s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"loglevel=7\ cryptkey=rootfs:/crypto_keyfile.bin root=/dev/mapper/root\ cryptdevice=UUID=${UUID_GRUB}:root\ rootflags=subvol=@\"|" \
 /mnt/etc/default/grub
 
 sed -i \
@@ -303,12 +302,14 @@ else
     echo -e " * Activation des services [\e[31m✖ \e[0m]"
 fi
 
-umount -R /mnt
-
-#cat /mnt/etc/default/grub | grep GRUB_CMDLINE_LINUX_DEFAULT
-#cat /mnt/etc/locale.gen | grep fr_FR.UTF-8
-#cat /mnt/etc/mkinitcpio.conf
-#cat /mnt/etc/fstab
-#cat /mnt/etc/crypttab
-#cat /mnt/etc/mkinitcpio.d/linux.preset
-#ls /mnt/boot
+#umount -R /mnt
+debug(){
+cat /mnt/etc/default/grub | grep GRUB_CMDLINE_LINUX_DEFAULT
+cat /mnt/etc/locale.gen | grep fr_FR.UTF-8
+cat /mnt/etc/mkinitcpio.conf
+cat /mnt/etc/fstab
+cat /mnt/etc/crypttab
+cat /mnt/etc/mkinitcpio.d/linux.preset
+ls /mnt/boot
+}
+debug
