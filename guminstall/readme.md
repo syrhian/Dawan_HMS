@@ -15,7 +15,7 @@ Attention: ce script efface entièrement le disque sélectionné (formatage + re
 - Package Gum: `pacman -Sy gum`.
 
 ## Fichiers
-- Script principal: [HMS/guminstall/dawarch.sh](HMS/guminstall/dawarch.sh)
+- Script principal: [Dawan_HMS/guminstall/dawarch.sh](Dawan_HMS/guminstall/dawarch.sh)
 - Log d’installation: `arch_install.log` (généré pendant l'utilisation du script)
 
 ## Variables configurables
