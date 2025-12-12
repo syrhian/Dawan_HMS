@@ -78,3 +78,4 @@ Vous pouvez ajuster les couleurs via les variables d’environnement de gum en d
 ## Remarques
 - Le script termine par une section de debug affichant plusieurs fichiers clés.
 décommentez la fonction et commentez la ligne `umount -R /mnt`
+- Si le script est modifié sur windows il est possible que l'encodage pose problème, il suffit d'utiliser le package `dos2unix` afin de le corriger.
