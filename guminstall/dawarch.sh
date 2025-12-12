@@ -58,8 +58,9 @@ export disk=$(lsblk -no NAME,TYPE,SIZE | awk '$2=="disk" {print $1, "(" $3 ")"}'
 export HOSTNAME="dawarch"
 
 ## user credentials
+export PASSWD="Passw0rd"
 export USER="dawan"
-export PASSWD="p"
+export USR_PASSWD="Passw0rd"
 
 ## packages to install
 export PACKAGES="linux-headers btrfs-progs grub efibootmgr"
@@ -290,12 +291,9 @@ fi
 
 ## création et ajout de la clé de chiffrement
 crypto_keyfile() {
-    # $1 = passphrase, $2 = disque (ex: sda)
-    # créer le keyfile dans le système cible
     dd if=/dev/urandom of=/mnt/crypto_keyfile.bin bs=512 count=8 status=none
     chmod 000 /mnt/crypto_keyfile.bin
     chown root:root /mnt/crypto_keyfile.bin
-    # ajouter la clé au LUKS (auth avec la passphrase)
     printf "%s" "$1" | cryptsetup luksAddKey "/dev/${2}2" /mnt/crypto_keyfile.bin
 }
 export -f crypto_keyfile
@@ -335,7 +333,7 @@ fi
 ## configuration du mot de passe utilisateur
 if gum spin --title "Configuration sudoers" -- bash -c "
 {
-cr chpasswd <<<\"\"$USER\":\"$PASSWD\"\"
+cr chpasswd <<<\"\"$USER\":\"$USR_PASSWD\"\"
 } >> ${LOG} 2>&1
 "; then
     echo -e " [\e[32m✔ \e[0m] Configuration du mot de passe de l'utilisateur $USER"
