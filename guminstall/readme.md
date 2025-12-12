@@ -1,5 +1,7 @@
 # Dawarch – Installation Arch Linux automatisée (Gum)
 
+![alt text](src/dawarch_script.png)
+
 script d'installation Arch Linux automatisée avec interface Gum.
 - préparation du disque cible
 - chiffrement (LUKS)
