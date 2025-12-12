@@ -75,39 +75,40 @@ export -f cr
 
 ## disk encryption
 disk_encrypt() {
-  #local cryptpass confirm
-
   while true; do
     cryptpass=$(gum input --password --header "Choix de la passphrase : ")
     confirm=$(gum input --password --header "Confirmer la passphrase : ")
-
     if [ "$cryptpass" != "$confirm" ]; then
-      gum spin -a "right" --spinner dot --spinner.foreground "196" --title "❌ Les passphrases ne correspondent pas, réessayez..." -- bash -c 'read -n 1 -s'
+      gum spin -a right --spinner dot --spinner.foreground "196" --title "❌ Les passphrases ne correspondent pas, réessayez..." -- bash -c 'read -n 1 -s'
     else
       break
     fi
   done
 
-  ## Lancement du chiffrement
-  if gum spin --title "Chiffrement avec LUKS ..." -- bash -c "
-  {
-  echo -e -n '$cryptpass' | sudo cryptsetup luksFormat /dev/${disk}2 --batch-mode --key-file=-
-  } >> ${LOG} 2>&1
-  "; then
-      echo -e " [\e[32m✔ \e[0m] + Chiffrement avec LUKS"
+  # Chiffrement LUKS
+  if CRYPTPASS="$cryptpass" DISK="$disk" LOG="$LOG" \
+     gum spin --title "Chiffrement avec LUKS ..." -- bash -e -c '
+    {
+      printf %s "$CRYPTPASS" | cryptsetup luksFormat "/dev/${DISK}2" --batch-mode --key-file=-
+    } >> "$LOG" 2>&1
+  '; then
+    echo -e " [\e[32m✔ \e[0m] + Chiffrement avec LUKS"
   else
-      echo -e " [\e[31m✖ \e[0m] + Chiffrement avec LUKS"
+    echo -e " [\e[31m✖ \e[0m] + Chiffrement avec LUKS"
+    return 1
   fi
 
-  ## Ouverture de la partition chiffrée
-  if gum spin --title "└── Accès a la partition." -- bash -c "
-  {
-  echo -e -n '$cryptpass' | sudo cryptsetup open /dev/${disk}2 root --key-file=-
-  } >> ${LOG} 2>&1
-  "; then
-      echo -e " [\e[32m✔ \e[0m] └── Accès a la partition"
+  # Ouverture de la partition chiffrée
+  if CRYPTPASS="$cryptpass" DISK="$disk" LOG="$LOG" \
+     gum spin --title "└── Accès a la partition" -- bash -e -c '
+    {
+      printf %s "$CRYPTPASS" | cryptsetup open "/dev/${DISK}2" root --key-file=-
+    } >> "$LOG" 2>&1
+  '; then
+    echo -e " [\e[32m✔ \e[0m] └── Accès a la partition"
   else
-      echo -e " [\e[31m✖ \e[0m] └── Accès a la partition"
+    echo -e " [\e[31m✖ \e[0m] └── Accès a la partition"
+    return 1
   fi
 }
 
@@ -289,23 +290,22 @@ fi
 
 ## création et ajout de la clé de chiffrement
 crypto_keyfile() {
-    mkfifo /tmp/.pw_fifo
-    printf "%s" "$1" > /tmp/.pw_fifo &
-
-    dd if=/dev/urandom of=/crypto_keyfile.bin bs=512 count=8
-    chmod 000 /crypto_keyfile.bin
-    chown root:root /crypto_keyfile.bin
-
-    echo -n "$1" | cryptsetup luksAddKey /dev/${2}2 /crypto_keyfile.bin
+    # $1 = passphrase, $2 = disque (ex: sda)
+    # créer le keyfile dans le système cible
+    dd if=/dev/urandom of=/mnt/crypto_keyfile.bin bs=512 count=8 status=none
+    chmod 000 /mnt/crypto_keyfile.bin
+    chown root:root /mnt/crypto_keyfile.bin
+    # ajouter la clé au LUKS (auth avec la passphrase)
+    printf "%s" "$1" | cryptsetup luksAddKey "/dev/${2}2" /mnt/crypto_keyfile.bin
 }
 export -f crypto_keyfile
 
-if DISK="$disk" CRYPTPASS="$cryptpass" \
-   gum spin --title "Création et ajout de la clé de chiffrement" -- bash -c "
+if DISK="$disk" CRYPTPASS="$cryptpass" LOG="$LOG" \
+   gum spin --title "Création et ajout de la clé de chiffrement" -- bash -e -c '
 {
-crypto_keyfile \"\$CRYPTPASS\" \"\$DISK\"
-} >> ${LOG} 2>&1
-"; then
+  crypto_keyfile "$CRYPTPASS" "$DISK"
+} >> "$LOG" 2>&1
+'; then
     echo -e " [\e[32m✔ \e[0m] Création et ajout de la clé de chiffrement"
 else
     echo -e " [\e[31m✖ \e[0m] Création et ajout de la clé de chiffrement"
