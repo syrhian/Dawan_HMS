@@ -256,6 +256,7 @@ lcls() {
     cr locale-gen
     echo "LANG=fr_FR.UTF-8" > /mnt/etc/locale.conf
     echo "KEYMAP=fr" > /mnt/etc/vconsole.conf
+    echo "EDITOR=nvim" >> /etc/environment
 }
 export -f lcls
 
